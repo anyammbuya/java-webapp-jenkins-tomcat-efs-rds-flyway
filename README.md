@@ -259,7 +259,8 @@ cat /opt/tomcat/logs/catalina.out
 - **SSH keys** for GitHub access managed securely
 - **EFS encrypted** at rest and in transit
 - **No hardcoded credentials** in scripts or configuration
-- **Use of VPC endpoints for SSM, KMS, S3 and Secrets Manager
+- **Use of VPC endpoints** for SSM, KMS, S3 and Secrets Manager
+- **Only tomcat server can access database server** and it does so through the app_user
 
 ### suggestions to harden security
 
