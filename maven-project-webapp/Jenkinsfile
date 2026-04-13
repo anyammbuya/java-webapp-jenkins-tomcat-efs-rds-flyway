@@ -1,0 +1,83 @@
+pipeline {
+    agent any
+
+    triggers {
+        githubPush()
+    }
+
+    tools {
+        maven 'Maven-3.9.11'   // Maven tool defined in JCasC
+        jdk 'Java-21'          // JDK defined in JCasC
+    }
+    
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main',
+                    url: 'git@github.com:KingstonLtd/maven-project-webapp.git',
+                    credentialsId: 'github-ssh-key'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                withMaven(maven: 'Maven-3.9.11') {
+                    sh 'mvn clean install'
+                }
+            }
+        }
+        
+         stage('Deploy or Rollback') {
+            steps {
+                script {
+                    def efsPath = "/mnt/efs_deploy"
+                    
+                    if (params.IS_ROLLBACK) {
+                        // --- ROLLBACK LOGIC ---
+                        if (params.ROLLBACK_VERSION == '') {
+                            error "You must provide a filename to rollback!"
+                        }
+                        echo "Rolling back to ${params.ROLLBACK_VERSION}..."
+                        sh "cp ${efsPath}/old_versions/${params.ROLLBACK_VERSION} ${efsPath}/"
+						sh "mv ${efsPath}/${params.ROLLBACK_VERSION} ${efsPath}/my-webapp.war"
+                        sh "chmod 644 ${efsPath}/my-webapp.war"
+                        echo "Rollback Successful. Tomcat is now deploying the old version."
+                        
+                    } else {
+                        // --- STANDARD DEPLOY LOGIC ---
+                        sh "mkdir -p ${efsPath}/old_versions"
+                        def ts = new Date().format("yyyyMMdd-HHmm")
+                        
+                        // Archive the CURRENT one before overwriting
+                        sh """
+                            if [ -f ${efsPath}/my-webapp.war ]; then
+                                cp ${efsPath}/my-webapp.war ${efsPath}/old_versions/my-webapp-build-${env.BUILD_NUMBER}-${ts}.war
+                            fi
+                        """
+                        
+                        // Deploy the NEW one
+                        sh "cp target/my-webapp-1.0-SNAPSHOT.war ${efsPath}/my-webapp.war"
+                        sh "chmod 644 ${efsPath}/my-webapp.war"
+                    }
+                }
+            }
+        }
+    } 
+
+    post {
+    success {
+        script {
+            // Clean up all version if any, leaving just three
+            sh "cd /mnt/efs_deploy/old_versions && ls -t *.war | tail -n +4 | xargs -r rm --"
+            echo "Build and deployment completed successfully! Old versions cleaned up if any."
+        } 
+    }
+    failure {
+        echo "Build or deployment failed. Check the console logs for EFS or Maven errors."
+    }
+	//Now that the full lifecycle (Build -> Deploy -> Archive -> Rollback -> Cleanup)
+  }
+}
+
+

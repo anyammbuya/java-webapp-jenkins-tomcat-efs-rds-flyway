@@ -1,0 +1,60 @@
+#cloud-config
+repo_update: true
+repo_upgrade: all
+
+cloud_final_modules:
+  - [write-files, always]
+  - [scripts-user, always]
+
+write_files:
+  - path: /usr/local/bin/nat_instance.sh
+    permissions: '0755'
+    content: |-
+      #!/bin/bash
+      yum update -y
+      yum install -y iptables-services
+      echo "net.ipv4.ip_forward=1" > /etc/sysctl.d/90-nat.conf
+      sysctl --system
+      ETH0_NAME=$(ip addr | grep device-number-0 | grep -oE 'device-number-.*$')
+      # Find the private interface name
+      for i in {1..10}; do
+        ETH1_NAME=$(ip addr | grep device-number-1 | grep -oE 'device-number-.*$') 
+        [[ -n "$ETH1_NAME" ]] && break
+        sleep 3
+      done
+      # Find the real interfaces ids
+      ETH0=$(ip -4 addr show $ETH0_NAME | grep -oP 'ens[0-9]+' | head -n1)
+      ETH1=$(ip -4 addr show $ETH1_NAME | grep -oP 'ens[0-9]+' | head -n1)
+      echo "Devices: public: $ETH0_NAME ($ETH0) and private: $ETH1_NAME ($ETH1)"
+      # Set up IPTables for NATting
+      iptables -F
+      iptables -t nat -F
+      iptables -P FORWARD ACCEPT
+      iptables -t nat -A POSTROUTING -o $ETH0 -j MASQUERADE
+      iptables -A FORWARD -i $ETH0 -o $ETH1 -m state --state RELATED,ESTABLISHED -j ACCEPT
+      iptables -A FORWARD -i $ETH1 -o $ETH0 -j ACCEPT
+      systemctl enable --now iptables
+      service iptables save
+      ### Routing configuration
+      # Clear current routes for ETH1 (private card)
+      rm -rf /etc/systemd/network/70-$ETH1.network.d
+      mkdir -p /etc/systemd/network/70-$ETH1.network.d
+      # Route traffic between private subnets
+      # Example: if our card is in subnet 10.1.101.0/24, then traffic for destination
+      # 10.1.102.0/24 should be sent to Gateway = 10.1.101.1.
+      cat <<EOF >> /etc/systemd/network/70-$ETH1.network.d/routes.conf
+%{~for cidr in setsubtract(private_subnets, [primary_subnet])}
+      [Route]
+      Destination=${cidr}
+      Gateway=${cidrhost(primary_subnet, 1)}
+      GatewayOnlink=yes
+%{~endfor}
+      EOF
+      networkctl reload
+      DATETIME=$(date)
+      echo "NAT instance setup complete at $DATETIME"
+      # END OF NAT INSTANCE SETUP
+
+runcmd:
+  - [bash, /usr/local/bin/nat_instance.sh]
+  - [shutdown, -r, now]
