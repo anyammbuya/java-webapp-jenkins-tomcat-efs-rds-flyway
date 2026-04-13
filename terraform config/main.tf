@@ -132,7 +132,7 @@ module "zeus_secrets_manager" {
 ###################################################
 # VPC Interface Endpoints
 ###################################################
-/*
+
 module "vpc_endpoints" {
   source = "./modules/vpc_endpoints"
 
@@ -143,7 +143,7 @@ module "vpc_endpoints" {
   private_route_table_ids   =  module.vpc.private_route_table_ids
 
 }
-*/
+
 ###################################################
 # Github actions Access
 ###################################################
