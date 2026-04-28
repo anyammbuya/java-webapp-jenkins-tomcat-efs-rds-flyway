@@ -19,7 +19,7 @@ Configuration as Code (JCasC), and jobs are defined using Job DSL.
 - **Private Subnets**: Jenkins, Tomcat servers and MySQL servers reside in private subnets for security
 - **NAT Instance**: Allows servers in the private subnets to have access to the Internet
 
-Application deployment** is handled via a **Pipeline** triggered by GitHub push events.
+Application deployment is handled via a **Pipeline** triggered by GitHub push events.
 
 ## Key Features
 
