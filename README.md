@@ -15,8 +15,11 @@ Configuration as Code (JCasC), and jobs are defined using Job DSL.
 - **EFS**: Shared storage for deployment artifacts and versioned WAR files
 - **Application Load Balancer**: External access point
 - **AWS Secrets Manager**: Secure storage for credentials and tokens
+- **KMS**: To encrypt secrets
 - **Private Subnets**: Jenkins, Tomcat servers and MySQL servers reside in private subnets for security
-- **Application deployment is handled via a **Pipeline** triggered by GitHub push events.
+- **NAT Instance**: Allows servers in the private subnets to have access to the Internet
+
+Application deployment** is handled via a **Pipeline** triggered by GitHub push events.
 
 ## Key Features
 
