@@ -98,6 +98,10 @@ maven-project-webapp/
 
 ## Infrastructure Components
 
+The workflow is illustrated in the diagram below.
+
+![3tier](3tier.png)
+
 ### VPC Configuration
 - Multi-AZ deployment for high availability
 - NAT Instance for outbound internet access from private subnets
