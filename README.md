@@ -4,7 +4,7 @@
 
 This project implements a complete CI/CD pipeline on AWS using Infrastructure as Code (IaC) with Terraform. 
 It is a three-tier infrastructure which consists of Jenkins, Tomcat and RDS-MySQL servers deployed in private subnets, 
-with an Application Load Balancer providing external access. The entire Jenkins configuration is managed through 
+with an Application Load Balancer providing external access. With an EFS mount, the Jenkins server is able to communicate build artifacts to the Tomcat server. The entire Jenkins configuration is managed through 
 Configuration as Code (JCasC), and jobs are defined using Job DSL.
 
 ## Architecture
