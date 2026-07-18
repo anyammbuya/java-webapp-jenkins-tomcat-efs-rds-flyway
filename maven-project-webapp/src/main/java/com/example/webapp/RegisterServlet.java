@@ -19,7 +19,7 @@ public class RegisterServlet extends HttpServlet {
         // 🔐 HASH PASSWORD
         String hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt());
 
-        try (Connection con = DBUtil.getConnection("app_user", "zeus_project_db")) {
+        try (Connection con = DBUtil.getConnection("app_user", "zeus_project_db", false)) {
 
             String sql = "INSERT INTO users(first_name, username, password) VALUES (?, ?, ?)";
             PreparedStatement ps = con.prepareStatement(sql);

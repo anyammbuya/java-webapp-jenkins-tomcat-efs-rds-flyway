@@ -2,10 +2,10 @@
 
 ## Project Overview
 
-This project implements a complete CI/CD pipeline on AWS using Infrastructure as Code (IaC) with Terraform. 
-It is a three-tier infrastructure which consists of Jenkins, Tomcat and RDS-MySQL servers deployed in private subnets, 
-with an Application Load Balancer providing external access. With an EFS mount, the Jenkins server is able to communicate build artifacts to the Tomcat server. The entire Jenkins configuration is managed through 
-Configuration as Code (JCasC), and jobs are defined using Job DSL.
+This project implements a complete CI/CD pipeline on AWS using Infrastructure as Code (IaC) with Terraform. It is a three-tier infrastructure which consists of Jenkins, Tomcat and RDS-MySQL (multi-az and read replica enabled) servers deployed in private subnets, with an Application Load Balancer providing external access. An S3 bucket which is part of a GitOps pipeline hold static web assets. With an EFS mount, the Jenkins server is able to communicate build artifacts to the Tomcat server. User sessions are managed with a serverless Valkey-Redis cluster. Using a cloudwatch log agent plus a Prometheus JMX exporter configured on the application servers, we stream logs to cloudwatch and application metrics to Amazon Managed Prometheus (AMP) workspace. We then implement an Amazon Grafana workspace which helps us to view these metrics, debug issues, optimize and monitor the application performance in realtime. Cloudtrail records API calls effected on resources in the AWS account. The entire Jenkins configuration is managed through Configuration as Code (JCasC), and jobs are defined using Job DSL. The beauty in the implementation of the Jenkins server here is that it is entirely managed by making a push to a github repository after changes are made to either Jenkins.yml or plugins.txt files. 
+
+## What this Project Achieves
+A cost-effective secure "state-kepping" java web application which is seamlessly managed through a CI/CD pipeline that incorporates versioning and deploys the application in a highly available fashion with application server and database layers that scale very well, delivering low latency responds under heavy load. 
 
 ## Architecture
 
@@ -13,6 +13,7 @@ Configuration as Code (JCasC), and jobs are defined using Job DSL.
 - **Tomcat Server**: Application server hosting the deployed web application
 - **RDS-MySQL server**: Database backend for the application
 - **EFS**: Shared storage for deployment artifacts and versioned WAR files
+- **S3 Bucket**: To store static web assets that are loaded by the browser without any processing cycles from application servers
 - **Application Load Balancer**: Deployed in the public subnets for external access
 - **Autoscaling Groups**: Ensures the Jenkins and tomcat instances are always available and can scale with workload
 - **AWS Secrets Manager**: Secure storage for credentials and tokens
@@ -22,6 +23,8 @@ Configuration as Code (JCasC), and jobs are defined using Job DSL.
 - **NAT Instance**: Allows servers in the private subnets to have access to the Internet
 
 Application deployment is handled via a **Pipeline** triggered by GitHub push events.
+
+![3tier](3tier.png)
 
 ## Key Features
 
@@ -37,7 +40,7 @@ Application deployment is handled via a **Pipeline** triggered by GitHub push ev
 - **Tomcat 10** deployment target with:
   - Pre-configured users (`deployer`, `admin`)
   - Remote deployment support
-  - EFS-mounted `webapps` directory for zero-downtime-ish deployments
+  - EFS-mounted `webapps` directory for zero-downtime deployments
 
 - **Deployment Workflow**:
   - Build with Maven
@@ -52,7 +55,7 @@ Application deployment is handled via a **Pipeline** triggered by GitHub push ev
 
 - AWS account with appropriate permissions
 - Terraform installed
-- Two Private GitHub repositories -  **manage-jenkins** and **maven-project-webapp**
+- Three Private GitHub repositories -  **manage-jenkins**,  **maven-project-webapp** and **zeus-static-assets**
 - SSH key configured in GitHub for Jenkins to authenticate when accessing the **maven-project-webapp** repo
 - Setup a github webhook for **maven-project-webapp** which will be triggered by push events
 - Setup a fine-grained access token to be used for authentication when the webhook is triggered
@@ -69,38 +72,46 @@ manage jenkins/
 │   └── workflows/
 │       └── update-jenkins-plugins.yml
 
+zeus-static-assets/
+├── .github/
+│   └── workflows/
+│       └── s3-sync.yml
+├── css/
+│   └── global.css
+├── html/
+│   └── faq.html
+└── images/
+    └── logo.png
+
 maven-project-webapp/
-├── pom.xml                                        # Maven build & dependency configuration
-├── Jenkinsfile                                    # CI/CD pipeline definition 
-├── README.md                                      # Project documentation
+├── pom.xml                                     # Maven build & dependency configuration
+├── Jenkinsfile                                 # CI/CD pipeline definition 
 ├── jenkins/
 │   └── jobs/
-│       └── webapp.groovy                          # Jenkins job configuration 
+│       └── webapp.groovy                       # Jenkins job configuration 
 ├── src/
 │   └── main/
 │       ├── java/
-│       │   └── com/example/webapp/                # Backend Source Code 
-│       │       ├── DBUtil.java                    # Database connection utility
-│       │       ├── FlywayInitializer.java         # Database migration startup
-│       │       ├── LoginServlet.java              # Login logic
-│       │       └── RegisterServlet.java           # Registration logic
+│       │   └── com/example/webapp/             # Backend Source Code 
+│       │       ├── AppContextListener.java     # Application lifecycle listener (added)
+│       │       ├── DBUtil.java                 # Database connection utility
+│       │       ├── FlywayInitializer.java      # Database migration startup
+│       │       ├── LoginServlet.java           # Login logic
+│       │       ├── LogoutServlet.java          # Logout logic (added)
+│       │       ├── RedisUtil.java              # Redis connection/caching utility (added)
+│       │       └── RegisterServlet.java        # Registration logic
 │       ├── resources/
-│       │   └── db/migration/                      # Database Migration Scripts
-│       │       ├── V1__create_table.sql           # Schema creation
-│       │       └── V2__create_users.sql           # User table setup
-│       └── webapp/                                # Frontend & Web Configuration
-│           ├── login.jsp                          # Login Page
-│           ├── register.jsp                       # Registration Page
-│           ├── welcome.jsp                        # Success Landing Page
+│       │   └── db/migration/                   # Database Migration Scripts
+│       │       ├── V1__create_table.sql        # Schema creation
+│       │       └── V2__create_users.sql        # User table setup
+│       └── webapp/                             # Frontend & Web Configuration
+│           ├── login.jsp                       # Login Page
+│           ├── register.jsp                    # Registration Page
+│           ├── services.jsp                    # Services overview page (added)
+│           ├── welcome.jsp                     # Success Landing Page
 │           └── WEB-INF/              
-│               └── web.xml                        # Servlet & Deployment Descriptor
+│               └── web.xml                     # Servlet & Deployment Descriptor
 ```
-
-## Infrastructure Components
-
-The workflow is illustrated in the diagram below.
-
-![3tier](3tier.png)
 
 ### VPC Configuration
 - Multi-AZ deployment for high availability
@@ -112,6 +123,7 @@ The workflow is illustrated in the diagram below.
 - **Tomcat SG**: Allows port 8080 from load balancer only
 - **RDS SG**: Allows port 3306 from Tomcat SG only
 - **EFS SG**: Allows NFS access from Jenkins and Tomcat security groups
+- **Valkey SG**: Allows ingress traffic only from application servers
 
 ### Storage (EFS)
 - Shared file system mounted at `/mnt/efs_deploy` on Jenkins
@@ -120,7 +132,8 @@ The workflow is illustrated in the diagram below.
 - Stores current WAR file and versioned backups
 
 ### Database (RDS-MySQL)
-- Uses a single-DB instance with multi-az disabled
+- Uses a single-DB instance with multi-az enabled
+- Read replica for read scalability.
 - Enables IAM database authentication, allowing application to access the DB via the user app_user
 - FlyWay is used to effect changes to the database through the admin user.  
 
@@ -179,6 +192,9 @@ Key plugins installed:
 1. Archives current WAR to `/mnt/efs_deploy/old_versions/` with timestamp and build number
 2. Copies new WAR to `/mnt/efs_deploy/my-webapp.war`
 3. Tomcat automatically picks up the new version
+
+### Deploy Static Assets
+-  Do a git push to static-asset repository
 
 **Rollback:**
 1. User selects `IS_ROLLBACK` parameter to enable rollback mode
@@ -276,6 +292,23 @@ cat /opt/tomcat/logs/catalina.out
 - Remove/disable the manager apps entirely.
 - Configure Tomcat for HTTPS (with a proper certificate) and set the ALB to forward HTTPS only. Disable HTTP connectors
 
+## Monitoring
+
+### CloudWatch Logs
+- View application logs in cloudwatch
+
+### Grafana
+
+To view metrics in grafana: 
+- create an IAM Identity Center user with previleges
+- Add the user under the account hosting the application
+- Assign the IAM Identity Center user to the Grafana workspace and make him admin
+- Login to Grafana using the credentials of IAM Identity Center user
+- In Grafana home screen add Prometheus as a data source.
+- Turn SigV4 Auth toggle to ON
+- Under SigV4 Auth Details, select your region and choose Workspace IAM Role
+- Click Save $ Test
+
 ## Troubleshooting
 
 ### Jenkins UI Not Accessible
@@ -316,6 +349,10 @@ When modifying this infrastructure:
 2. Update documentation to reflect changes
 3. Follow the "as-code" principles - no manual changes
 4. Store all configuration in version control
+
+## Future Work
+1. Global Content Delivery (CDN) with CloudFront
+2. Custom domain with Route53
 
 ## License
 

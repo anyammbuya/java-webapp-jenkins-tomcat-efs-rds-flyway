@@ -81,6 +81,18 @@
         "kms:Decrypt"
       ],
       "Resource": "*"
+   },
+   {
+      "Sid": "Allow CloudTrail to encrypt logs",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "cloudtrail.amazonaws.com"
+      },
+      "Action": [
+        "kms:GenerateDataKey*",
+        "kms:Decrypt"
+      ],
+      "Resource": "*"
    }
  ]
 }

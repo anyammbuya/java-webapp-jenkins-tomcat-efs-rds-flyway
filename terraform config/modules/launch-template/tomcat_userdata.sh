@@ -34,8 +34,7 @@ for file in /opt/tomcat/webapps/docs/META-INF/context.xml \
             /opt/tomcat/webapps/manager/META-INF/context.xml
 do
   if grep -q 'RemoteAddrValve' "$file"; then
-    sed -i 's/<Valve className="org.apache.catalina.valves.RemoteAddrValve"/<!-- <Valve className="org.apache.catalina.valves.RemoteAddrValve"/' "$file"
-    sed -i 's/\/>$/\/> -->/' "$file"
+    sed -i 's/<Valve className="org.apache.catalina.valves.RemoteAddrValve"//' "$file"
   fi
 done
 
@@ -88,6 +87,60 @@ echo "${efs_id}:/ /opt/tomcat/webapps efs _netdev,tls,accesspoint=${efs_accesspt
 cp -r /opt/tomcat/webapps_backup/* /opt/tomcat/webapps/
 rm -rf /opt/tomcat/webapps_backup
 chown -R tomcat:tomcat /opt/tomcat/webapps
+
+
+# ==============================================================================
+# ADDITIONAL CODE: PRODUCTION MONITORING EXTENSION
+# ==============================================================================
+
+# 1. Install CloudWatch Agent binary
+dnf install -y amazon-cloudwatch-agent
+
+# 2. Setup Prometheus JMX (M=Manag't, X=extension) Exporter for internal metric (JVM Memory, Thread pools, Request processing times)
+wget -O /opt/tomcat/jmx_exporter.jar https://repo1.maven.org/maven2/io/prometheus/jmx/jmx_prometheus_javaagent/0.20.0/jmx_prometheus_javaagent-0.20.0.jar
+chown tomcat:tomcat /opt/tomcat/jmx_exporter.jar
+
+# Create baseline empty Prometheus config structure for the Java Agent
+cat <<EOT > /opt/tomcat/conf/jmx_config.yaml
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+EOT
+chown tomcat:tomcat /opt/tomcat/conf/jmx_config.yaml
+
+# 3. Inject the JVM Exporter into Tomcat instance variables via setenv.sh
+cat <<EOT >> /opt/tomcat/bin/setenv.sh
+export CATALINA_OPTS="\$CATALINA_OPTS -javaagent:/opt/tomcat/jmx_exporter.jar=9404:/opt/tomcat/conf/jmx_config.yaml"
+EOT
+chown tomcat:tomcat /opt/tomcat/bin/setenv.sh
+
+# 4. Generate CloudWatch Prometheus Local Target Map
+
+mkdir -p /opt/aws/amazon-cloudwatch-agent/bin
+cat <<EOT > /opt/aws/amazon-cloudwatch-agent/bin/prometheus.yaml
+global:
+  scrape_interval: 1m
+scrape_configs:
+  - job_name: 'tomcat-jvm'
+    static_configs:
+      - targets: ['localhost:9404']
+EOT
+
+# 5. Fetch CloudWatch agent Unified Engine Configuration from ssm parameter store, then
+# Initialize and launch the CloudWatch Agent background daemon
+
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a fetch-config \
+  -m ec2 \
+  -s \
+  -c ssm:/zeus/tomcat/cloudwatch-agent-config
+
+
+
+
+
+# ==============================================================================
+# END OF MONITORING EXTENSION
+# ==============================================================================
 
 
 # Start Tomcat

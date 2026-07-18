@@ -2,40 +2,67 @@ package com.example.webapp;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.util.Properties;
-
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.rds.RdsClient;
+import java.sql.SQLException;
 
 public class DBUtil {
 
-    private static final String HOST = "zeus-db.cxsee6smsxz1.us-west-2.rds.amazonaws.com";
-    private static final int PORT = 3306;
-    private static final Region REGION = Region.US_WEST_2;
+    // Primary cluster - writer endpoint
+    private static final String DB_WRITER_ENDPOINT =
+            "zeus-db.cxsee6smsxz1.us-west-2.rds.amazonaws.com";
 
-    public static Connection getConnection(String user, String db) throws Exception {
+    // 3 Read Replica endpoint
+    private static final String DB_READER_ENDPOINT =
+            "zeus-db-replica.cxsee6smsxz1.us-west-2.rds.amazonaws.com";
 
-        var rdsClient = RdsClient.builder()
-                .region(REGION)
-                .build();
+    private static final String DB_PORT = "3306";
 
-        var token = rdsClient.utilities().generateAuthenticationToken(builder -> builder
-                .hostname(HOST)
-                .port(PORT)
-                .username(user)
-        );
+    private static final String AWS_REGION = "us-west-2";
 
-        String dbPart = (db != null) ? "/" + db : "";
+    public static Connection getConnection(
+            String dbUser,
+            String dbName,
+            boolean isReadOnly
+    ) throws SQLException {
 
-        String url = "jdbc:mysql://" + HOST + ":" + PORT + dbPart +
-                "?useSSL=true&requireSSL=true";
+        try {
 
-        Properties props = new Properties();
-        props.setProperty("user", user);
-        props.setProperty("password", token);
-		
-		Class.forName("com.mysql.cj.jdbc.Driver");
+            Class.forName("software.amazon.jdbc.Driver");
 
-        return DriverManager.getConnection(url, props);
+            // Pick endpoint based on the intent of the request
+            String targetEndpoint = isReadOnly ? DB_READER_ENDPOINT : DB_WRITER_ENDPOINT;
+
+            String url =
+                    "jdbc:aws-wrapper:mysql://"
+                    + targetEndpoint
+                    + ":"
+                    + DB_PORT
+                    + "/"
+                    + dbName
+                    + "?wrapperPlugins=iam"
+                    + "&iamRegion="
+                    + AWS_REGION;
+
+            Connection connection =
+                    DriverManager.getConnection(
+                            url,
+                            dbUser,
+                            null
+                    );
+
+            System.out.println(
+                    "IAM database authentication successful (" 
+                    + (isReadOnly ? "READER" : "WRITER") 
+                    + ") for user: " + dbUser
+            );
+
+            return connection;
+
+        } catch (ClassNotFoundException e) {
+
+            throw new SQLException(
+                    "AWS JDBC wrapper driver not found",
+                    e
+            );
+        }
     }
 }

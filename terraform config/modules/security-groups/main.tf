@@ -167,3 +167,31 @@ resource "aws_security_group" "rds_sg" {
 
    tags = var.tags
 }
+
+##################################################
+# Security Group (valkey Cluster)
+####################################################
+
+resource "aws_security_group" "zeus_valkey_sg" {
+  name        = "zeus-valkey-security-group"
+  vpc_id      = var.vpc_id
+  description = "Allows secure access to valkey cluster nodes from application pods"
+
+  ingress {
+    description = "Allow Jedis traffic from Tomcat"
+    from_port   = 6379
+    to_port     = 6379
+    protocol    = "tcp"
+    cidr_blocks = [var.cidr_vpc]
+  }
+
+  egress {
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [var.cidr_vpc]
+  }
+
+  tags = var.tags
+}

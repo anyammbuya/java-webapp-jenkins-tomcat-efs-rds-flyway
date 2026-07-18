@@ -20,6 +20,11 @@ output "tomcat_server_ip" {
 }
 */
 
+output "valkey_serverless_endpoint" {
+  description = "access point id"
+  value       = module.valkey.valkey_serverless_endpoint             
+}
+
 output "lb_dns_name" {
   description = "DNS name of lb"
   value       = module.zeus_load_balancer.lb_dns_name

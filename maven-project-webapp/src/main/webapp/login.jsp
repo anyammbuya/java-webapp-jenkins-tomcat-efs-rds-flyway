@@ -99,7 +99,7 @@
     <form action="login" method="post">
         <div class="container">
             <label for="uname"><b>Username</b></label>
-            <input type="text" placeholder="Enter His Username" name="username" required>
+            <input type="text" placeholder="Enter Username" name="username" required>
 
             <label for="psw"><b>Password</b></label>
             <input type="password" placeholder="Enter Password" name="password" required>
@@ -117,7 +117,7 @@
     </form>
 
     <% if (request.getParameter("error") != null) { %>
-        <p style="color:red; text-align:center;">Invalid username or password</p>
+        <p style="color:red; text-align:center;">Invalid usernamee or password</p>
     <% } %>
     
     <div class="reg-container">
@@ -125,6 +125,18 @@
             <button type="button" class="regbtn">Create Account</button>
         </a>
     </div>
+    <div style="text-align: center; margin-top: 30px;">
+    <!-- Combined Public Links: S3 Static FAQ + Tomcat Dynamic Services Portal -->
+    <p>
+        Explore our <a href="services.jsp" style="color: #04AA6D; font-weight: bold;">Application Services</a> 
+        | Need help? View our public <a href="https://zeus-app-static-assets.s3.us-west-2.amazonaws.com/html/faq.html" style="color: #2196F3; font-weight: bold;">Frequently Asked Questions</a>
+    </p>
+</div>
 
+    <% if ("unauthorized".equals(request.getParameter("error"))) { %>
+        <p style="color:red; text-align:center; font-weight:bold;">Security Warning: You must log in to view the secure dashboard.</p>
+    <% } else if ("expired".equals(request.getParameter("error"))) { %>
+        <p style="color:orange; text-align:center;">Your session has expired. Please log in again.</p>
+    <% } %>
 </body>
 </html>

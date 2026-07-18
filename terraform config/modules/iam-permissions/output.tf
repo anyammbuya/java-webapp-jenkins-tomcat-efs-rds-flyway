@@ -19,5 +19,11 @@ output "ec2profileARN_tomcat" {
   value       = aws_iam_instance_profile.tomcat.arn
 }
 
+output "grafana_workspace_roleArn" {
+  description = "grafana workspace role Arn"
+  value       = aws_iam_role.grafana_workspace_role.arn
+}
+
+
 
 

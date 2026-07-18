@@ -88,6 +88,24 @@
        <groupId>software.amazon.awssdk</groupId>
        <artifactId>secretsmanager</artifactId>
     </dependency>
+
+  <!--permits use of jdbc -->
+  <dependency>
+    <groupId>software.amazon.jdbc</groupId>
+    <artifactId>aws-advanced-jdbc-wrapper</artifactId>
+    <version>2.5.6</version>
+ </dependency>
+
+<dependency>
+    <groupId>software.amazon.awssdk</groupId>
+    <artifactId>sts</artifactId>
+</dependency>
+
+<dependency>
+    <groupId>org.slf4j</groupId>
+    <artifactId>slf4j-simple</artifactId>
+    <version>2.0.13</version>
+</dependency>
 	
 	<!-- Needed by FlyWay to perform DB migration (effect changes on DB) -->
 	<dependency>
@@ -95,5 +113,20 @@
        <artifactId>flyway-mysql</artifactId>
        <version>9.22.3</version>
     </dependency>
+
+    <!-- Redis Client Driver for programmatic connection -->
+<dependency>
+    <groupId>redis.clients</groupId>
+    <artifactId>jedis</artifactId>
+    <version>5.1.2</version>
+</dependency>
+
+<!-- Apache Commons Pool (Required by Jedis internally to run JedisPoolConfig) -->
+    <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-pool2</artifactId>
+        <version>2.13.1</version>
+    </dependency>
+
   </dependencies>
 </project>

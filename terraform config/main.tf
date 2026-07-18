@@ -10,8 +10,8 @@ locals {
   rendered_policy = templatefile("${path.module}/modules/json-policy/kms-access-policy.json.tpl", {
     account_id     = data.aws_caller_identity.current.account_id
     region         = var.aws_region
-    jenkinsiamrole = module.ec2_permissions.ec2iamrole_jenkins
-    tomcatiamrole  = module.ec2_permissions.ec2iamrole_tomcat
+    jenkinsiamrole = module.iam_permissions.ec2iamrole_jenkins
+    tomcatiamrole  = module.iam_permissions.ec2iamrole_tomcat
   })
   kms_policy = jsondecode(local.rendered_policy)
 }
@@ -32,13 +32,14 @@ locals {
 
 locals {
   rendered_tom_policy = templatefile("${path.module}/modules/json-policy/tomcat-perms.json.tpl", {
-    account_id          = data.aws_caller_identity.current.account_id
-    region              = var.aws_region
-    kms_key_id          = module.zeus_kms.kms_key_id
-    efs_id              = module.efs.efs_id
-    efs_accesspt_id     = module.efs.efs_access_point_id
-    db_admin_secretARN  = module.zeus_secrets_manager.db_admin_secret_arn
-    db_resource_id      = module.rds.db_resource_id
+    account_id                  = data.aws_caller_identity.current.account_id
+    region                      = var.aws_region
+    kms_key_id                  = module.zeus_kms.kms_key_id
+    efs_id                      = module.efs.efs_id
+    efs_accesspt_id             = module.efs.efs_access_point_id
+    db_admin_secretARN          = module.zeus_secrets_manager.db_admin_secret_arn
+    primary_db_resource_id      = module.rds.primary_db_resource_id
+    replica_db_resource_id      = module.rds.replica_db_resource_id
   })
   tomcat_policy = jsondecode(local.rendered_tom_policy)
 }
@@ -102,6 +103,7 @@ module "security_groups"{
 
   vpc_id      = module.vpc.vpc_id
   cidr_blocks = module.vpc.private_subnets_cidr_blocks
+  cidr_vpc    = var.vpc_cidr_block
   tags        = var.vpc_tags
 }
 
@@ -143,13 +145,15 @@ module "vpc_endpoints" {
   private_route_table_ids   =  module.vpc.private_route_table_ids
 
 }
-
+S
 ###################################################
 # Github actions Access
 ###################################################
 
-module "githubAssmaccess" {
+module "githubActions" {
   source = "./modules/github_actions"
+
+  asset_bucket_arn = module.s3_and_policy.asset_bucket_arn 
 
   tags       = var.vpc_tags
 
@@ -158,8 +162,8 @@ module "githubAssmaccess" {
 # s3 logging
 ###################################################
 
-module "s3-ssmlogs" {
-  source = "./modules/s3-4ssmlogs"
+module "s3_and_policy" {
+  source = "./modules/s3"
 
   kms_key_id =  module.zeus_kms.kms_key_id
   tags       = var.vpc_tags
@@ -173,7 +177,7 @@ module "ssm_preferences"{
   source = "./modules/ssm-preferences"
 
   kms_key_id     = module.zeus_kms.kms_key_id
-  bucket_name    = module.s3-ssmlogs.s3_bucket_name
+  bucket_name    = module.s3_and_policy.s3_bucket_name
   tags           = var.vpc_tags
 
 # Rectify issues with the existence of SSM-SessionManagerRunShell
@@ -200,12 +204,12 @@ module "zeus_load_balancer" {
 #   ec2 instance profile with permission
 #############################################
 
-module "ec2_permissions" {
-  source = "./modules/ec2-permissions"
+module "iam_permissions" {
+  source = "./modules/iam-permissions"
   
   jenkins_policy           = local.jenkins_policy
   tomcat_policy            = local.tomcat_policy
-
+  
   tags                     = var.vpc_tags
   region                   = var.aws_region
     
@@ -220,7 +224,7 @@ module "zeus_launch_template" {
   source = "./modules/launch-template"
 
   security_group_ids   = [module.security_groups.jksg_id]
-  instance_profile_arn = [module.ec2_permissions.ec2profileARN_jenkins, module.ec2_permissions.ec2profileARN_tomcat]
+  instance_profile_arn = [module.iam_permissions.ec2profileARN_jenkins, module.iam_permissions.ec2profileARN_tomcat]
   efs_id               = module.efs.efs_id
   efs_accesspt_id      = module.efs.efs_access_point_id
   tags                 = var.vpc_tags
@@ -256,7 +260,7 @@ module "nat-tomcat" {
   subnet_id_private        = module.vpc.private_subnets[0]
   private_route_table_ids  = module.vpc.private_route_table_ids
   cidr_blocks_private      = module.vpc.private_subnets_cidr_blocks
-  #nat_ec2profile           = module.ec2_permissions.nat_ec2profile
+  #nat_ec2profile           = module.iam_permissions.nat_ec2profile
   vpc_id                   = module.vpc.vpc_id
 }
 
@@ -276,6 +280,64 @@ module "rds" {
   rds_sg_id              = module.security_groups.rds_sg_id 
   subnet_id_private      = slice(module.vpc.private_subnets, 2, 4)
   tags                   = var.vpc_tags
+}
 
+
+#################################################
+#                   valkey Cache
+#################################################
+
+module "valkey" {
+  source = "./modules/valkey"
+  subnet_ids_private     = slice(module.vpc.private_subnets, 0, 2)
+  valkey_sg_id            = module.security_groups.valkey_cluster_sg_id
+  tags                   = var.vpc_tags
+
+}
+
+###################################################
+#                CloudTrail
+##################################################
+
+module "zeus_cloudtrail" {
+  source = "./modules/cloudtrail"
+
+  bucket_name  = module.s3_and_policy.s3_bucket_name
+  tags         = var.vpc_tags
+
+}
+
+
+#################################################
+#       Prometheus/Grafana Workspaces
+#################################################
+
+module "monitoring_workspaces" {
+  source  = "./modules/promethus-grafana-wsp"
+
+  grafana_workspace_roleArn = module.iam_permissions.grafana_workspace_roleArn
+
+}
+
+#################################################
+#           CloudWatch
+#################################################
+
+module "zeus_cloudwatch" {
+  source = "./modules/cloudwatch"
+
+   tags  = var.vpc_tags
+
+}
+
+#################################################
+#           SSM Parameter Store
+#################################################
+
+module "parameterstore" {
+  source = "./modules/parameterstore"
+
+  prometheus_workspace_id = module.monitoring_workspaces.prometheus_workspace_id
+  log_group_name          = module.zeus_cloudwatch.log_group_name
 
 }

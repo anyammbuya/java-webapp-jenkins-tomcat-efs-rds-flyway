@@ -27,3 +27,8 @@ output "rds_sg_id" {
   description = "db instance security group"
   value       = aws_security_group.rds_sg.id
 }
+
+output "valkey_cluster_sg_id" {
+  description = "valkey cluster security group id"
+  value       = aws_security_group.zeus_valkey_sg.id
+}
