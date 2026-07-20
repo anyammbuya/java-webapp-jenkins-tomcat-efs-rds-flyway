@@ -9,7 +9,7 @@ resource "aws_db_instance" "zeus_mysql" {
   allocated_storage           = 20
   backup_retention_period     = 1
   db_subnet_group_name        = aws_db_subnet_group.db_subnet_group.name
-  multi_az                    = false
+  multi_az                    = true
   
   db_name                     = "zeus_project_db"
   username                    = "admin"
